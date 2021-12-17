@@ -12,12 +12,12 @@ typedef struct Poz poz;
 #define PLAY 0
 #define OPTIONS 1
 #define HIGHSCORE_MENU 2
-#define about 3
+#define ABOUT 3
 #define MENU 4 
 #define GAME_PREPARATION 5
 #define GAME_PLAY 6
 #define NEW_HIGHSCORE 7
-#define FINAL_SCREEN 8
+#define GAME_OVER 8
 #define END_GAME 9
 
 #define LEFT 1
@@ -37,7 +37,7 @@ typedef struct Poz poz;
 
 #define CHANGE_BRIGHTNESS 0
 
-int dificulty = 0;
+byte dificulty;
 String gitLink = String("https://github.com/palulconst1/matrixGame");
 long score = 1;
 
@@ -69,20 +69,13 @@ const int d5 = 4;
 const int d6 = 3;
 const int d7 = 2;
 
-int distance;
-int reading;
-long duration;;
-
 poz cursorOptionsMenu[4] = { {0, 0}, {7, 0}, {0, 1}, {10, 1 } };
 poz cursorOptionsSettings[6] = { {0, 0}, {6, 0}, {11, 0}, {0, 1}, {6, 1}, {13, 1 } };
 byte cursorActualPoz = 0;
 LiquidCrystal lcd(RS, enable, d4, d5, d6, d7);
-byte lcdBrightness = 9;
-byte lcdContrast = 9;
+byte lcdBrightness;
+byte lcdContrast;
 
-int incomingByte;
-char incomingChar;
-String incomingString;
 byte lcdState = MENU;
 
 byte matrixBrightness = 2;
@@ -98,6 +91,28 @@ bool matrix[matrixSize][matrixSize] = {
   {0, 0, 0, 0, 0, 0, 0, 0},
   {0, 0, 0, 0, 0, 0, 0, 0},
   {0, 0, 0, 0, 0, 0, 0, 0}  
+};
+
+bool collisionMatrix[matrixSize][matrixSize] = {
+  {0, 0, 0, 0, 0, 0, 0, 0}, 
+  {0, 0, 0, 0, 0, 0, 0, 0}, 
+  {0, 0, 0, 0, 0, 0, 0, 0}, 
+  {0, 0, 0, 0, 0, 0, 0, 0}, 
+  {0, 0, 0, 0, 0, 0, 0, 0},
+  {0, 0, 0, 0, 0, 0, 0, 0}, 
+  {0, 0, 0, 0, 0, 0, 0, 0}, 
+  {0, 0, 0, 0, 0, 0, 0, 0},
+};
+
+byte heartShape[] = {
+  B00000,
+  B01010,
+  B11111,
+  B11111,
+  B11111,
+  B01110,
+  B00100,
+  B00000
 };
 
 byte matrixByte[matrixSize] = {
@@ -145,20 +160,63 @@ byte arrow[8] = {
 
 bool joyMovedXMenu = false;
 bool joyMovedY = false;
-String username = "PLR";
-String usernameHighScore = "PLR";
+String username;
+
+String usernameHighScore1;
+unsigned int highScore1 = 0;
+String usernameHighScore2;
+unsigned int highScore2 = 0;
+String usernameHighScore3;
+unsigned int highScore3 = 0;
+
 const unsigned int noOfUsernamePos = 3;
-int currentStringPos = 0;
+unsigned int currentStringPos = 0;
 bool settingName = LOW;
-int contrast = 100;
+unsigned int contrast = 100;
 bool contrastChanged = LOW;
+
+
+// memorii
+#define currentUsername 0
+#define matrixBr 0
+#define lcdBr 3
+#define lcdCt 6
+#define hs1 10
+#define hs2 20
+#define hs3 30
+#define hsn1 40
+#define hsn2 50
+#define hsn3 60
+#define dificultyMem 70
+
+poz playerPoz = {4, 0};
+
+byte const nrOfTiles = 3;
+poz tilesPoz[nrOfTiles] = { {1, 8}, {4, 8}, {7, 8} };
+int activeTiles[nrOfTiles] = {0, 0, 0};
+int tilesDelay[nrOfTiles] = {0, 0, 0};
+
+int tileSpeed = 1500;
+int startingTileSpeed = 1500;
+unsigned long lastSpeedCheck[nrOfTiles] = {0, 0, 0};
+
+unsigned long lastDelayCheck[nrOfTiles] = {0, 0, 0};
+
+int blinkRate = 100;
+unsigned long lastBlinked = 0;
+
+int tilesColected = 0;
+byte lifes = 3;
+long gameplayStarted;
+
+long lastScoreAdd;
+int scoreDelay = 300;
+
  
 void setup()
 {
-  // the zero refers to the MAX7219 number, it is zero for 1 chip
-  lc.shutdown(0, false); // turn off power saving, enables display
-  lc.setIntensity(0, matrixBrightness); // sets matrixBrightness (0~15 possible values)
-  lc.clearDisplay(0);// clear screen
+  lc.shutdown(0, false);
+  lc.clearDisplay(0);
 
   pinMode(xPin, INPUT);
   pinMode(yPin, INPUT);
@@ -167,7 +225,43 @@ void setup()
 
   matrix[xPos][yPos] = 1;
 
+
+  //read mem
+  matrixBrightness = readIntFromEEPROM(matrixBr);
+  if(matrixBrightness > 15)
+    matrixBrightness = matrixBrightness / 10;
+  lc.setIntensity(0, matrixBrightness);
+
+  lcdBrightness = readIntFromEEPROM(lcdBr);
+  if(lcdBrightness > 10)
+    lcdBrightness = lcdBrightness / 10;
+
+  lcdContrast = readIntFromEEPROM(lcdCt);
+  if(lcdContrast > 10)
+    lcdContrast = lcdContrast / 10;
+  contrast = (lcdContrast + 1) * 20;
+  analogWrite(contrastPin, contrast);
+
+  dificulty = readIntFromEEPROM(dificultyMem);
+  if(dificulty > 10)
+    dificulty = dificulty / 10;
+    
+  username = readStringFromEEPROM(currentUsername);
+  if(username == "")
+    username = "PLR";
+
+  highScore1 = readIntFromEEPROM(hs1);
+  highScore2 = readIntFromEEPROM(hs2);
+  highScore3 = readIntFromEEPROM(hs3);
+
+  usernameHighScore1 = readStringFromEEPROM(hsn1);
+  usernameHighScore2 = readStringFromEEPROM(hsn2);
+  usernameHighScore3 = readStringFromEEPROM(hsn3);
+
+    
+
   lcd.createChar(0, arrow);
+  lcd.createChar(1, heartShape);
   lcd.begin(16, 2);
   long startingMsgTimer = millis();
   lcd.clear();
@@ -185,10 +279,7 @@ void setup()
 }
 
 void loop() {
-  if(!contrastChanged) {
-    analogWrite(contrastPin, contrast);
-  }
-//  displayNewHighscore
+  
   switch (lcdState)
   {
   case MENU:
@@ -197,10 +288,6 @@ void loop() {
 
   case PLAY:
     play();
-    break;
-
-  case END_GAME:
-    displayEndGame();
     break;
 
   case OPTIONS:
@@ -215,18 +302,14 @@ void loop() {
     displayGamePreparation();
     break;
 
-  case GAME_PLAY:
-    displayGamePlay();
-    break;
-
   case NEW_HIGHSCORE:
     displayNewHighscore();
     break;
 
-  case FINAL_SCREEN:
-    displayFinalScreen();
+  case GAME_OVER:
+    displayGameOver();
     break;
-  case about:
+  case ABOUT:
     displayAbout();
     break;
   }
@@ -333,6 +416,50 @@ byte updatePositionsLcd() {
   return 0;
 }
 
+byte playerMove() {
+  int xValue = analogRead(xPin);
+  int yValue = analogRead(yPin);
+
+  if(xValue > minThreshold && xValue < maxThreshold && yValue > minThreshold && yValue < maxThreshold) {
+    joyMoved = LOW;
+  }
+
+  if(joyMoved == LOW) {
+    if (xValue < minThreshold) {
+      if(playerPoz.col == matrixSize - 2) {
+        return 0;
+      }
+      joyMoved = HIGH;
+      return RIGHT;
+    }
+  
+    if (xValue > maxThreshold) {
+      if(playerPoz.col == matrixSize - 7) {
+        return 0;
+      }
+      joyMoved = HIGH;
+      return LEFT;
+    }
+  
+    if (yValue > maxThreshold) {
+      if(playerPoz.lin == matrixSize - 3) {
+        return 0;
+      }
+      joyMoved = HIGH;
+      return UP;
+    }
+  
+    if (yValue < minThreshold) {
+      if(playerPoz.lin == matrixSize - 8) {
+        return 0;
+      }
+        joyMoved = HIGH;
+        return DOWN;
+    }
+  }
+  return 0;
+}
+
 byte buttonPressed(){
   if(millis() - lastBounce > bounceDelay) {
     valSW = digitalRead(swPin);
@@ -346,11 +473,11 @@ byte buttonPressed(){
 
 void setupName() {
   while(settingName) {
-  lcd.setCursor(7, 1);//print dificulty
+  lcd.setCursor(7, 1);
   lcd.print("N:");
   lcd.print(username); 
   
-  lcd.setCursor(currentStringPos + 9, 0);//print dificult
+  lcd.setCursor(currentStringPos + 9, 0);
   lcd.write(byte(0));
   
   if(buttonPressed()) {
@@ -416,7 +543,6 @@ void displayMenu()
   lcd.write(byte(0));
 
 
-
   //change menu selection
   byte cursorMove = updatePositionsLcd();
   if (cursorMove == LEFT)
@@ -441,13 +567,91 @@ void displayMenu()
     lcd.clear();
     lcdState = cursorActualPoz;
     cursorActualPoz = 0;
+
+    lastDelayCheck[0] = millis();
+    lastDelayCheck[1] = millis();
+    lastDelayCheck[2] = millis();
+    score = 0;
+    gameplayStarted = millis();
+    lifes = 3;
+    tileSpeed = startingTileSpeed;
+    tilesColected = 0;
+    lastScoreAdd = millis();
+    
     return;
   }
 }
 
 void play() {
-  lcd.setCursor(1, 0);
-  lcd.print("Level 1");
+  playMenu();
+  if(millis() - lastScoreAdd > scoreDelay) {
+  score = score + 1 * (2001 - tileSpeed)/500;
+  lastScoreAdd = millis();
+  }
+
+  tileSpeed = startingTileSpeed - tilesColected * 20;
+  
+  if(lifes <= 0) {
+    lc.clearDisplay(0);
+    lcd.clear();
+    if(score > highScore3)
+      lcdState = NEW_HIGHSCORE;
+    else
+      lcdState = GAME_OVER;
+    return;
+  }
+  byte moved = playerMove();
+  switch (moved)
+  {
+  case LEFT:
+    ClearDisplayPlayer();
+    playerPoz.col --;
+    break;
+
+  case RIGHT:
+    ClearDisplayPlayer();
+    playerPoz.col ++;
+    break;
+
+  case UP:
+    ClearDisplayPlayer();
+    playerPoz.lin ++;
+    break;
+
+  case DOWN:
+    ClearDisplayPlayer();
+    playerPoz.lin --;
+    break;
+  }
+
+  displayTiles();
+  DisplayPlayer();
+
+  
+
+  if(buttonPressed()) {
+    byte col = playerPoz.col;
+    byte lin = playerPoz.lin + 1;
+    for(byte i = 0; i < nrOfTiles; i++) {
+      byte tileCol1 = tilesPoz[i].col;
+      byte tileCol2 = tilesPoz[i].col - 1;
+      
+      byte tileLine1 = tilesPoz[i].lin;
+      byte tileLine2 = tilesPoz[i].lin + 1;
+      byte tileLine3 = tilesPoz[i].lin + 2;
+      if(col == tileCol1 || col == tileCol2){
+        if(lin == tileLine1 || lin == tileLine2 || lin == tileLine3) {
+        tilesColected ++;
+        score = score + (2000 - tileSpeed)/20;
+        activeTiles[i] == 0;
+        ClearDisplayTile(tilesPoz[i]);
+        tilesPoz[i].lin = 7;
+        break;
+      }
+      }
+    }
+  }
+  
 }
 
 void displayEndGame() {
@@ -462,28 +666,28 @@ void displayGamePlay() {
 }
 
 void displayOptions()
-{
-  lcd.setCursor(1, 0);//print dificulty
+{ 
+  lcd.setCursor(1, 0);
   lcd.print("BM:");
   lcd.print(matrixBrightness);
 
-  lcd.setCursor(7, 0);//print dificulty
+  lcd.setCursor(7, 0);
   lcd.print("BL:");
   lcd.print(lcdBrightness);
 
-  lcd.setCursor(12, 0);//print dificulty
+  lcd.setCursor(12, 0);
   lcd.print("CL:");
   lcd.print(lcdContrast);
   
-  lcd.setCursor(1, 1);//print dificulty
+  lcd.setCursor(1, 1);
   lcd.print("DIF:");
   lcd.print(dificulty);
 
-  lcd.setCursor(7, 1);//print dificulty
+  lcd.setCursor(7, 1);
   lcd.print("N:");
   lcd.print(username);
 
-  lcd.setCursor(14, 1);//print exit option
+  lcd.setCursor(14, 1);
   lcd.print("EX");
 
   if (settingName == LOW) {
@@ -515,6 +719,13 @@ void displayOptions()
       lcdState = MENU;
       lcd.clear();
       cursorActualPoz = 0;
+
+    writeIntIntoEEPROM(lcdCt, lcdContrast);
+    writeIntIntoEEPROM(matrixBr, matrixBrightness);
+    writeIntIntoEEPROM(lcdBr, lcdBrightness);
+    writeIntIntoEEPROM(dificultyMem, dificulty);
+    writeStringToEEPROM(currentUsername, username);
+      
       return;
     }
 
@@ -548,6 +759,7 @@ void displayOptions()
       else
         matrixBrightness = matrixBrightness + 1;
       lcd.clear();
+      lc.setIntensity(0, matrixBrightness);
     }
     else if (cursorMove == DOWN)
     {
@@ -556,13 +768,13 @@ void displayOptions()
       else
         matrixBrightness = matrixBrightness - 1;
       lcd.clear();
+      lc.setIntensity(0, matrixBrightness);
     }
   }
 
   if (cursorActualPoz == CHANGE_LCDBR) {
     if (cursorMove == UP)
     {
-      contrastChanged = HIGH;
       if (lcdBrightness == 9)
         lcdBrightness = 0;
       else
@@ -571,7 +783,6 @@ void displayOptions()
     }
     else if (cursorMove == DOWN)
     {
-      contrastChanged = HIGH;
       if (lcdBrightness == 0)
         lcdBrightness = 9;
       else
@@ -583,6 +794,7 @@ void displayOptions()
   if (cursorActualPoz == CHANGE_LCDCONTRAST) {
     if (cursorMove == UP)
     {
+      contrastChanged = HIGH;
       if (lcdContrast == 9)
         lcdContrast = 0;
       else
@@ -591,6 +803,7 @@ void displayOptions()
     }
     else if (cursorMove == DOWN)
     {
+      contrastChanged = HIGH;
       if (lcdContrast == 0)
         lcdContrast = 9;
       else
@@ -602,6 +815,7 @@ void displayOptions()
   if(contrastChanged) {
   contrast = (lcdContrast + 1) * 20;
   analogWrite(contrastPin, contrast);
+  contrastChanged = LOW;
   }
 
   if (cursorActualPoz == CHANGE_NAME && buttonPressed()) {
@@ -678,30 +892,70 @@ void displayNewHighscore() {
   lcd.clear();
   lcd.setCursor(2, 0);
   lcd.print("NEW HIGHSCORE");
-  lcd.setCursor(6, 1);
-  lcd.print(score);
-  writeEEPROM(score);
-  usernameHighScore = username;
-  lcd.setCursor(9, 1);
-  lcd.print(usernameHighScore);
-  writeStringEEPROM(usernameHighScore);
 
-  lcdState = FINAL_SCREEN;
+  if(score > highScore1){
+    highScore3 = highScore2;
+    usernameHighScore3 = usernameHighScore2;
+    highScore2 = highScore1;
+    usernameHighScore2 = usernameHighScore1;
+    highScore1 = score;
+    usernameHighScore1 = username;
+  }
+  else if(score > highScore2){
+    highScore3 = highScore2;
+    usernameHighScore3 = usernameHighScore2;
+    highScore2 = score;
+    usernameHighScore2 = username;
+  }
+  else{
+    highScore3 = score;
+    usernameHighScore3 = username;
+  }
+  lcd.setCursor(6, 1);
+  lcd.print(username);
+  lcd.print(":");
+  lcd.setCursor(10, 1);
+  lcd.print(score);
+
+  lcdState = HIGHSCORE_MENU;
+
+  writeIntIntoEEPROM(hs1, highScore1);
+  writeIntIntoEEPROM(hs2, highScore2);
+  writeIntIntoEEPROM(hs3, highScore3);
+
+  writeStringToEEPROM(hsn1, usernameHighScore1);
+  writeStringToEEPROM(hsn2, usernameHighScore2);
+  writeStringToEEPROM(hsn3, usernameHighScore3);
+  
   while (millis() - msgStartTime < 5000);
+  lcd.clear();
 }
 
 void displayHighScore() {
-  long highscore;
-  readEEPROM(highscore);
-  readStringEEPROM(usernameHighScore);
+  highScore1 = readIntFromEEPROM(hs1);
+  usernameHighScore1 = readStringFromEEPROM(hsn1);
+  highScore2 = readIntFromEEPROM(hs2);
+  usernameHighScore2 = readStringFromEEPROM(hsn2);
+  highScore3 = readIntFromEEPROM(hs3);
+  usernameHighScore3 = readStringFromEEPROM(hsn3);
   
-  lcd.setCursor(0, 0);
-  lcd.print("HIGHSCORE:");
-  lcd.print(highscore);
-
   lcd.setCursor(0, 1);
-  lcd.print("NAME:");
-  lcd.print(usernameHighScore);
+  lcd.print(usernameHighScore2);
+  lcd.print(":");
+  lcd.setCursor(4, 1);
+  lcd.print(highScore2);
+
+  lcd.setCursor(9, 1);
+  lcd.print(usernameHighScore3);
+  lcd.print(":");
+  lcd.setCursor(13, 1);
+  lcd.print(highScore3);
+
+  lcd.setCursor(3, 0);
+  lcd.print(usernameHighScore1);
+  lcd.print(":");
+  lcd.setCursor(7, 0);
+  lcd.print(highScore1);
 
   if (buttonPressed()){
     lcdState = MENU;//go back to main menu
@@ -715,38 +969,170 @@ void displayHighScore() {
   lcd.print("Preparing");
 }
 
- void displayFinalScreen() {
-  lcd.setCursor(1, 0);
-  lcd.print("Final Screen");
+ void displayGameOver() {
+  lcd.setCursor(0, 0);
+  lcd.print("GAME OVER");
+  lcd.setCursor(0, 1);
+  lcd.print(username);
+  lcd.print(":");
+  lcd.setCursor(4, 1);
+  lcd.print(score);
+  
+  if (buttonPressed()){
+    lcdState = MENU;//go back to main menu
+    lcd.clear();
+    return;
+  }
 }
 
-void writeEEPROM(long &x) {
-  byte *v = (byte*)(void*)&x;
-  int addr = 0;
-  for (int i = 0; i < sizeof(x); i++)
-    EEPROM.update(addr++, *v++);
 
+void showTile(poz tile) {
+  lc.setLed(0, tile.col - 1, tile.lin, true);
+  lc.setLed(0, tile.col, tile.lin, true);
+  lc.setLed(0, tile.col, tile.lin + 1, true);
+  lc.setLed(0, tile.col - 1, tile.lin + 1, true);
+  lc.setLed(0, tile.col, tile.lin + 2, true);
+  lc.setLed(0, tile.col - 1, tile.lin + 2, true);
 }
 
-void writeStringEEPROM(String &x) {
-  byte *v = (byte*)(void*)&x;
-  int addr = 0;
-  for (int i = 0; i < sizeof(x); i++)
-    EEPROM.update(addr++, *v++);
-
+void ClearDisplayTile(poz tile) {
+  lc.setLed(0, tile.col - 1, tile.lin, false);
+  lc.setLed(0, tile.col, tile.lin, false);
+  lc.setLed(0, tile.col, tile.lin + 1, false);
+  lc.setLed(0, tile.col - 1, tile.lin + 1, false);
+  lc.setLed(0, tile.col, tile.lin + 2, false);
+  lc.setLed(0, tile.col - 1, tile.lin + 2, false);
 }
 
-//read value from eeprom into x
-void readEEPROM(long &x) {
-  byte *v = (byte*)(void*)&x;
-  int addr = 0;
-  for (int i = 0; i < sizeof(x); i++)
-    *v++ = EEPROM.read(addr++);
+void writeIntIntoEEPROM(int address, int number)
+{ 
+  byte byte1 = number >> 8;
+  byte byte2 = number & 0xFF;
+  EEPROM.update(address, byte1);
+  EEPROM.update(address + 1, byte2);
 }
 
-void readStringEEPROM(String &x) {
-  byte *v = (byte*)(void*)&x;
-  int addr = 0;
-  for (int i = 0; i < sizeof(x); i++)
-    *v++ = EEPROM.read(addr++);
+void writeStringToEEPROM(int addrOffset, const String &strToWrite)
+{
+  byte len = strToWrite.length();
+  EEPROM.update(addrOffset, len);
+  for (int i = 0; i < len; i++)
+  {
+    EEPROM.update(addrOffset + 1 + i, strToWrite[i]);
+  }
+}
+
+int readIntFromEEPROM(int address)
+{
+  byte byte1 = EEPROM.read(address);
+  byte byte2 = EEPROM.read(address + 1);
+  return (byte1 << 8) + byte2;
+}
+
+String readStringFromEEPROM(int addrOffset)
+{
+  int newStrLen = EEPROM.read(addrOffset);
+  char data[newStrLen + 1];
+  for (int i = 0; i < newStrLen; i++)
+  {
+    data[i] = EEPROM.read(addrOffset + 1 + i);
+  }
+  data[newStrLen] = '\0';
+  return String(data);
+}
+
+void turnOnMatrix() {
+  for (int row = 0; row < matrixSize; row++) {
+    for (int col = 0; col < matrixSize; col++) {
+      lc.setLed(0, row, col, 1);
+    }
+  }
+}
+
+void DisplayPlayer() {
+  lc.setLed(0, playerPoz.col, playerPoz.lin, true);
+  lc.setLed(0, playerPoz.col, playerPoz.lin + 1, true);
+  lc.setLed(0, playerPoz.col + 1, playerPoz.lin + 1, true);
+  lc.setLed(0, playerPoz.col - 1, playerPoz.lin + 1, true);
+  lc.setLed(0, playerPoz.col, playerPoz.lin + 2, true);
+
+  if(millis() - lastBlinked > blinkRate) {
+    ClearDisplayPlayer();
+    lastBlinked = millis();
+  }
+}
+
+void ClearDisplayPlayer() {
+  lc.setLed(0, playerPoz.col, playerPoz.lin, false);
+  lc.setLed(0, playerPoz.col, playerPoz.lin + 1, false);
+  lc.setLed(0, playerPoz.col + 1, playerPoz.lin + 1, false);
+  lc.setLed(0, playerPoz.col - 1, playerPoz.lin + 1, false);
+  lc.setLed(0, playerPoz.col, playerPoz.lin + 2, false);
+}
+
+void displayTiles(){
+  for(byte i = 0; i < nrOfTiles; i++) {
+    if(activeTiles[i] == 0) {
+      int tileDelay = random(0, 250);
+      tileDelay = tileDelay*10;
+      tilesDelay[i] = tileDelay;
+      activeTiles[i] = 2;
+    }
+  }
+
+  if(activeTiles[0] == 2) {
+    if(millis() - lastDelayCheck[0] > tilesDelay[0]) {
+    activeTiles[0] = 1;
+    }
+  }
+  
+  if(activeTiles[1] == 2) {
+    if(millis() - lastDelayCheck[1] > tilesDelay[1]) {
+    activeTiles[1] = 1;
+    }
+  }
+  
+  if(activeTiles[2] == 2) {
+    if(millis() - lastDelayCheck[2] > tilesDelay[2]) {
+    activeTiles[2] = 1;
+    }
+  }
+
+  if(activeTiles[0] == 1)
+    displayTile(0);
+  if(activeTiles[1] == 1)
+    displayTile(1);
+  if(activeTiles[2] == 1)
+    displayTile(2);
+  
+}
+
+void displayTile(int tileNr) {
+  showTile(tilesPoz[tileNr]);
+ 
+  if(millis() - lastSpeedCheck[tileNr] > tileSpeed) {
+    lastSpeedCheck[tileNr] = millis();
+    ClearDisplayTile(tilesPoz[tileNr]);
+    
+    if(tilesPoz[tileNr].lin == 0) {
+        tilesPoz[tileNr].lin = 7;
+        activeTiles[tileNr] = 0;
+        lastDelayCheck[tileNr] = millis();
+        lifes --;
+        lcd.clear();
+      } else {
+          tilesPoz[tileNr].lin --;
+        }
+    }
+}
+
+void playMenu(){
+  for(byte i = 0; i < lifes; i++) {
+    lcd.setCursor(i, 0);
+    lcd.write(byte(1));
+  }
+  lcd.setCursor(0, 1);
+  lcd.print("Score:");
+  lcd.setCursor(7, 1);
+  lcd.print(score);
 }
