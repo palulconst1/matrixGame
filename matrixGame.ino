@@ -1,6 +1,7 @@
 #include "LedControl.h" //  need the library
 #include<LiquidCrystal.h>
 #include<EEPROM.h>
+#include "pitches.h"
 
 struct Poz
 {
@@ -14,11 +15,9 @@ typedef struct Poz poz;
 #define HIGHSCORE_MENU 2
 #define ABOUT 3
 #define MENU 4 
-#define GAME_PREPARATION 5
-#define GAME_PLAY 6
+#define SELECT_SONG 5
 #define NEW_HIGHSCORE 7
 #define GAME_OVER 8
-#define END_GAME 9
 
 #define LEFT 1
 #define RIGHT 2
@@ -33,9 +32,11 @@ typedef struct Poz poz;
 #define BACK 5
 
 #define MIN_DIF 0
-#define MAX_DIF 3
+#define MAX_DIF 5
 
 #define CHANGE_BRIGHTNESS 0
+
+const int buzzerPin = 7;
 
 byte dificulty;
 String gitLink = String("https://github.com/palulconst1/matrixGame");
@@ -212,9 +213,12 @@ long gameplayStarted;
 long lastScoreAdd;
 int scoreDelay = 300;
 
+bool stopMusic = 0;
  
 void setup()
 {
+//  deleteHighScore();
+  
   lc.shutdown(0, false);
   lc.clearDisplay(0);
 
@@ -222,6 +226,7 @@ void setup()
   pinMode(yPin, INPUT);
   pinMode(swPin, INPUT_PULLUP);
   pinMode(contrastPin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
 
   matrix[xPos][yPos] = 1;
 
@@ -275,10 +280,9 @@ void setup()
   while (millis() - startingMsgTimer < 2500);
 
   lcd.clear();
-  
 }
 
-void loop() {
+void loop() { 
   
   switch (lcdState)
   {
@@ -298,8 +302,8 @@ void loop() {
     displayHighScore();
     break;
 
-  case GAME_PREPARATION:
-    displayGamePreparation();
+  case SELECT_SONG:
+    selectSong();
     break;
 
   case NEW_HIGHSCORE:
@@ -542,7 +546,6 @@ void displayMenu()
   lcd.setCursor(cursorOptionsMenu[cursorActualPoz].col, cursorOptionsMenu[cursorActualPoz].lin);
   lcd.write(byte(0));
 
-
   //change menu selection
   byte cursorMove = updatePositionsLcd();
   if (cursorMove == LEFT)
@@ -562,7 +565,7 @@ void displayMenu()
     lcd.clear();
   }
 
-  if (buttonPressed() == 1)//if joystick is pressed
+  if (buttonPressed() == 1)
   {
     lcd.clear();
     lcdState = cursorActualPoz;
@@ -574,15 +577,21 @@ void displayMenu()
     score = 0;
     gameplayStarted = millis();
     lifes = 3;
-    tileSpeed = startingTileSpeed;
+    tileSpeed = startingTileSpeed - dificulty*100;
     tilesColected = 0;
     lastScoreAdd = millis();
+    playerPoz = {4, 0};
+    tilesPoz[0] = {1, 8};
+    tilesPoz[1] = {4, 8};
+    tilesPoz[2] = {7, 8};
+    stopMusic = 0;
     
     return;
   }
 }
 
 void play() {
+  //music1();
   playMenu();
   if(millis() - lastScoreAdd > scoreDelay) {
   score = score + 1 * (2001 - tileSpeed)/500;
@@ -590,8 +599,13 @@ void play() {
   }
 
   tileSpeed = startingTileSpeed - tilesColected * 20;
+
+  if(tilesColected > 0 && tilesColected % 10 == 0){
+    score = score + dificulty * 15;
+  }
   
   if(lifes <= 0) {
+    stopMusic = 1;
     lc.clearDisplay(0);
     lcd.clear();
     if(score > highScore3)
@@ -654,17 +668,6 @@ void play() {
   
 }
 
-void displayEndGame() {
-  lcd.setCursor(1, 0);
-  lcd.print("game ended");
-}
-
-
-void displayGamePlay() {
-  lcd.setCursor(1, 0);
-  lcd.print("game ended");
-}
-
 void displayOptions()
 { 
   lcd.setCursor(1, 0);
@@ -689,6 +692,8 @@ void displayOptions()
 
   lcd.setCursor(14, 1);
   lcd.print("EX");
+
+  turnOnMatrix();
 
   if (settingName == LOW) {
   //print cursor
@@ -716,6 +721,7 @@ void displayOptions()
 
     if (cursorActualPoz == BACK && buttonPressed())
     {
+      turnOffMatrix();
       lcdState = MENU;
       lcd.clear();
       cursorActualPoz = 0;
@@ -729,7 +735,7 @@ void displayOptions()
       return;
     }
 
-  //change dificulty if selected
+
   if (cursorActualPoz == CHANGE_DIF)
   {
     if (cursorMove == UP)
@@ -840,7 +846,7 @@ void displayAbout() {
   {
   case 0:
     lcd.setCursor(0, 0);
-    lcd.print("Nume Joc");
+    lcd.print("Tiles");
     break;
   case 1:
     lcd.setCursor(0, 0);
@@ -888,6 +894,7 @@ void displayAbout() {
 }
 
 void displayNewHighscore() {
+  stopMusic = 0;
   long msgStartTime = millis();
   lcd.clear();
   lcd.setCursor(2, 0);
@@ -926,6 +933,10 @@ void displayNewHighscore() {
   writeStringToEEPROM(hsn1, usernameHighScore1);
   writeStringToEEPROM(hsn2, usernameHighScore2);
   writeStringToEEPROM(hsn3, usernameHighScore3);
+
+  if(score > 10000){
+  music2();
+  }
   
   while (millis() - msgStartTime < 5000);
   lcd.clear();
@@ -964,7 +975,7 @@ void displayHighScore() {
   }
 }
 
- void displayGamePreparation() {
+ void selectSong() {
   lcd.setCursor(1, 0);
   lcd.print("Preparing");
 }
@@ -1045,6 +1056,14 @@ void turnOnMatrix() {
   for (int row = 0; row < matrixSize; row++) {
     for (int col = 0; col < matrixSize; col++) {
       lc.setLed(0, row, col, 1);
+    }
+  }
+}
+
+void turnOffMatrix() {
+  for (int row = 0; row < matrixSize; row++) {
+    for (int col = 0; col < matrixSize; col++) {
+      lc.setLed(0, row, col, 0);
     }
   }
 }
@@ -1131,8 +1150,104 @@ void playMenu(){
     lcd.setCursor(i, 0);
     lcd.write(byte(1));
   }
+  lcd.setCursor(5, 0);
+  lcd.print("DIF:");
+  lcd.setCursor(9, 0);
+  lcd.print(dificulty);
   lcd.setCursor(0, 1);
   lcd.print("Score:");
   lcd.setCursor(7, 1);
   lcd.print(score);
+}
+
+void music1(){
+  if(stopMusic)
+    return;
+  
+// The melody array 
+int melody[] = {
+  NOTE_FS5, NOTE_FS5, NOTE_D5, NOTE_B4, NOTE_B4, NOTE_E5, 
+  NOTE_E5, NOTE_E5, NOTE_GS5, NOTE_GS5, NOTE_A5, NOTE_B5, 
+  NOTE_A5, NOTE_A5, NOTE_A5, NOTE_E5, NOTE_D5, NOTE_FS5, 
+  NOTE_FS5, NOTE_FS5, NOTE_E5, NOTE_E5, NOTE_FS5, NOTE_E5
+};
+int durations[] = {
+  8, 8, 8, 4, 4, 4, 
+  4, 5, 8, 8, 8, 8, 
+  8, 8, 8, 4, 4, 4, 
+  4, 5, 8, 8, 8, 8
+};
+int songLength = sizeof(melody)/sizeof(melody[0]);
+
+  for (int thisNote = 0; thisNote < songLength; thisNote++){
+    int duration = 1000/ durations[thisNote];
+    tone(buzzerPin, melody[thisNote], duration);
+    int pause = duration * 1.3;
+    delay(pause);
+    // stop the tone
+    noTone(buzzerPin);
+  }
+}
+
+void music2(){
+  if(stopMusic)
+    return;
+  
+  int tempo = 80;
+  int melody[] = {
+
+  // The Godfather theme
+  // Score available at https://musescore.com/user/35463/scores/55160
+
+  REST, 4, REST, 8, REST, 8, REST, 8, NOTE_E4, 8, NOTE_A4, 8, NOTE_C5, 8, //1
+  NOTE_B4, 8, NOTE_A4, 8, NOTE_C5, 8, NOTE_A4, 8, NOTE_B4, 8, NOTE_A4, 8, NOTE_F4, 8, NOTE_G4, 8,
+  NOTE_E4, 2, NOTE_E4, 8, NOTE_A4, 8, NOTE_C5, 8,
+  NOTE_B4, 8, NOTE_A4, 8, NOTE_C5, 8, NOTE_A4, 8, NOTE_C5, 8, NOTE_A4, 8, NOTE_E4, 8, NOTE_DS4, 8,
+  
+  NOTE_D4, 2, NOTE_D4, 8, NOTE_F4, 8, NOTE_GS4, 8, //5
+  NOTE_B4, 2, NOTE_D4, 8, NOTE_F4, 8, NOTE_GS4, 8,
+  NOTE_A4, 2, NOTE_C4, 8, NOTE_C4, 8, NOTE_G4, 8, 
+  NOTE_F4, 8, NOTE_E4, 8, NOTE_G4, 8, NOTE_F4, 8, NOTE_F4, 8, NOTE_E4, 8, NOTE_E4, 8, NOTE_GS4, 8,
+};
+
+// sizeof gives the number of bytes, each int value is composed of two bytes (16 bits)
+// there are two values per note (pitch and duration), so for each note there are four bytes
+int notes = sizeof(melody) / sizeof(melody[0]) / 2;
+
+// this calculates the duration of a whole note in ms
+int wholenote = (60000 * 4) / tempo;
+
+int divider = 0, noteDuration = 0;
+
+  // iterate over the notes of the melody.
+  // Remember, the array is twice the number of notes (notes + durations)
+  for (int thisNote = 0; thisNote < notes * 2; thisNote = thisNote + 2) {
+
+    // calculates the duration of each note
+    divider = melody[thisNote + 1];
+    if (divider > 0) {
+      // regular note, just proceed
+      noteDuration = (wholenote) / divider;
+    } else if (divider < 0) {
+      // dotted notes are represented with negative durations!!
+      noteDuration = (wholenote) / abs(divider);
+      noteDuration *= 1.5; // increases the duration in half for dotted notes
+    }
+
+    // we only play the note for 90% of the duration, leaving 10% as a pause
+    tone(buzzerPin, melody[thisNote], noteDuration * 0.9);
+
+    // Wait for the specief duration before playing the next note.
+    delay(noteDuration);
+
+    // stop the waveform generation before the next note.
+    noTone(buzzerPin);
+  }
+
+}
+
+void deleteHighScore(){
+  writeIntIntoEEPROM(hs1, 0);
+  writeIntIntoEEPROM(hs2, 0);
+  writeIntIntoEEPROM(hs3, 0);
 }
