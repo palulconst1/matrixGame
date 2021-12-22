@@ -31,8 +31,8 @@ typedef struct Poz poz;
 #define CHANGE_NAME 4
 #define BACK 5
 
-#define MIN_DIF 0
-#define MAX_DIF 5
+#define MIN_DIF 1
+#define MAX_DIF 4
 
 #define CHANGE_BRIGHTNESS 0
 
@@ -92,17 +92,6 @@ bool matrix[matrixSize][matrixSize] = {
   {0, 0, 0, 0, 0, 0, 0, 0},
   {0, 0, 0, 0, 0, 0, 0, 0},
   {0, 0, 0, 0, 0, 0, 0, 0}  
-};
-
-bool collisionMatrix[matrixSize][matrixSize] = {
-  {0, 0, 0, 0, 0, 0, 0, 0}, 
-  {0, 0, 0, 0, 0, 0, 0, 0}, 
-  {0, 0, 0, 0, 0, 0, 0, 0}, 
-  {0, 0, 0, 0, 0, 0, 0, 0}, 
-  {0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0}, 
-  {0, 0, 0, 0, 0, 0, 0, 0}, 
-  {0, 0, 0, 0, 0, 0, 0, 0},
 };
 
 byte heartShape[] = {
@@ -203,8 +192,13 @@ unsigned long lastSpeedCheck[nrOfTiles] = {0, 0, 0};
 
 unsigned long lastDelayCheck[nrOfTiles] = {0, 0, 0};
 
+bool doublePress[nrOfTiles] = {0, 0, 0};
+long lastDoubleBounce = 0;
+const int doubleBounceDelay = 300;
+
 int blinkRate = 100;
 unsigned long lastBlinked = 0;
+unsigned long lastBlinkedTile[nrOfTiles] = {0, 0, 0};
 
 int tilesColected = 0;
 byte lifes = 3;
@@ -214,6 +208,15 @@ long lastScoreAdd;
 int scoreDelay = 300;
 
 bool stopMusic = 0;
+
+
+
+// muzica
+int currentNote = 0;
+
+
+
+
  
 void setup()
 {
@@ -283,7 +286,8 @@ void setup()
 }
 
 void loop() { 
-  
+  if(!stopMusic)
+    music();
   switch (lcdState)
   {
   case MENU:
@@ -317,75 +321,6 @@ void loop() {
     displayAbout();
     break;
   }
-}
-
-void updateMatrix() {
-  for (int row = 0; row < matrixSize; row++) {
-    for (int col = 0; col < matrixSize; col++) {
-      lc.setLed(0, row, col, matrix[row][col]);
-    }
-  }
-}
-
-void updateByteMatrix() {
-  for (int row = 0; row < matrixSize; row++) {
-    lc.setRow(0, row, matrixByte[row]);
-  }
-}
-
-byte updatePositions() {
-  int xValue = analogRead(xPin);
-  int yValue = analogRead(yPin);
-
-  xLastPos = xPos;
-  yLastPos = yPos;
-  
-  if (xValue < minThreshold) {
-    if (xPos < matrixSize - 1) {
-      xPos++;
-      return RIGHT;
-    } 
-    else {
-      xPos = 0;
-    }
-  }
-
-  if (xValue > maxThreshold) {
-    if (xPos > 0) {
-      xPos--;
-      return LEFT;
-    }
-    else {
-      xPos = matrixSize - 1;
-    }
-  }
-
-  if (yValue > maxThreshold) {
-    if (yPos < matrixSize - 1) {
-      yPos++;
-      return UP;
-    } 
-    else {
-      yPos = 0;
-    }
-  }
-
-  if (yValue < minThreshold) {
-    if (yPos > 0) {
-      yPos--;
-      return DOWN;
-    }
-    else {
-      yPos = matrixSize - 1;
-    }
-  }
-
-  if(xPos != xLastPos || yPos != yLastPos) {
-    matrixChanged = true;
-    matrix[xLastPos][yLastPos] = 0;
-    matrix[xPos][yPos] = 1;
-  }
-  return 0;
 }
 
 byte updatePositionsLcd() {
@@ -571,6 +506,7 @@ void displayMenu()
     lcdState = cursorActualPoz;
     cursorActualPoz = 0;
 
+    
     lastDelayCheck[0] = millis();
     lastDelayCheck[1] = millis();
     lastDelayCheck[2] = millis();
@@ -585,13 +521,15 @@ void displayMenu()
     tilesPoz[1] = {4, 8};
     tilesPoz[2] = {7, 8};
     stopMusic = 0;
+    currentNote = 0;
     
+      
     return;
   }
 }
 
 void play() {
-  //music1();
+
   playMenu();
   if(millis() - lastScoreAdd > scoreDelay) {
   score = score + 1 * (2001 - tileSpeed)/500;
@@ -644,6 +582,7 @@ void play() {
   
 
   if(buttonPressed()) {
+    lastDoubleBounce = millis();
     byte col = playerPoz.col;
     byte lin = playerPoz.lin + 1;
     for(byte i = 0; i < nrOfTiles; i++) {
@@ -655,12 +594,27 @@ void play() {
       byte tileLine3 = tilesPoz[i].lin + 2;
       if(col == tileCol1 || col == tileCol2){
         if(lin == tileLine1 || lin == tileLine2 || lin == tileLine3) {
+          if(!doublePress[i]) {
         tilesColected ++;
         score = score + (2000 - tileSpeed)/20;
-        activeTiles[i] == 0;
+        activeTiles[i] = 0;
         ClearDisplayTile(tilesPoz[i]);
         tilesPoz[i].lin = 7;
         break;
+          }
+          else {
+            while(millis() - lastDoubleBounce < doubleBounceDelay) {
+              if(buttonPressed()) {
+            tilesColected ++;
+            score = score + (2000 - tileSpeed)/20 + 25;
+            activeTiles[i] = 0;
+            ClearDisplayTile(tilesPoz[i]);
+            tilesPoz[i].lin = 7;
+            doublePress[i] = 0;
+            break;
+              }
+          }
+          }
       }
       }
     }
@@ -894,7 +848,6 @@ void displayAbout() {
 }
 
 void displayNewHighscore() {
-  stopMusic = 0;
   long msgStartTime = millis();
   lcd.clear();
   lcd.setCursor(2, 0);
@@ -933,10 +886,6 @@ void displayNewHighscore() {
   writeStringToEEPROM(hsn1, usernameHighScore1);
   writeStringToEEPROM(hsn2, usernameHighScore2);
   writeStringToEEPROM(hsn3, usernameHighScore3);
-
-  if(score > 10000){
-  music2();
-  }
   
   while (millis() - msgStartTime < 5000);
   lcd.clear();
@@ -973,6 +922,12 @@ void displayHighScore() {
     lcd.clear();
     return;
   }
+
+  if(updatePositionsLcd() == UP){
+    deleteHighScore();
+    lcd.clear();
+  }
+  
 }
 
  void selectSong() {
@@ -1096,6 +1051,11 @@ void displayTiles(){
       tileDelay = tileDelay*10;
       tilesDelay[i] = tileDelay;
       activeTiles[i] = 2;
+      if(dificulty >= 2) {
+        int doublePressed = random(3, 11 - dificulty);
+        if(doublePressed == 5)
+          doublePress[i] = 1;
+      }
     }
   }
 
@@ -1142,6 +1102,16 @@ void displayTile(int tileNr) {
       } else {
           tilesPoz[tileNr].lin --;
         }
+      if(millis() - lastBlinkedTile[tileNr] > blinkRate) {
+        ClearDisplayPlayer();
+        lastBlinkedTile[tileNr] = millis();
+      }
+    }
+    if(doublePress[tileNr]) {
+      if(millis() - lastBlinkedTile[tileNr] > blinkRate) {
+        ClearDisplayTile(tilesPoz[tileNr]);
+        lastBlinkedTile[tileNr] = millis();
+      }
     }
 }
 
@@ -1160,91 +1130,161 @@ void playMenu(){
   lcd.print(score);
 }
 
-void music1(){
+int pause = 0;
+long lastPause = 0;
+int songLength = 0;
+int duration = 0;
+
+void music(){
   if(stopMusic)
     return;
   
-// The melody array 
-int melody[] = {
-  NOTE_FS5, NOTE_FS5, NOTE_D5, NOTE_B4, NOTE_B4, NOTE_E5, 
-  NOTE_E5, NOTE_E5, NOTE_GS5, NOTE_GS5, NOTE_A5, NOTE_B5, 
-  NOTE_A5, NOTE_A5, NOTE_A5, NOTE_E5, NOTE_D5, NOTE_FS5, 
-  NOTE_FS5, NOTE_FS5, NOTE_E5, NOTE_E5, NOTE_FS5, NOTE_E5
-};
-int durations[] = {
-  8, 8, 8, 4, 4, 4, 
-  4, 5, 8, 8, 8, 8, 
-  8, 8, 8, 4, 4, 4, 
-  4, 5, 8, 8, 8, 8
-};
-int songLength = sizeof(melody)/sizeof(melody[0]);
 
-  for (int thisNote = 0; thisNote < songLength; thisNote++){
-    int duration = 1000/ durations[thisNote];
-    tone(buzzerPin, melody[thisNote], duration);
-    int pause = duration * 1.3;
-    delay(pause);
-    // stop the tone
-    noTone(buzzerPin);
+  int melody1[] = {
+    NOTE_FS5, NOTE_FS5, NOTE_D5, NOTE_B4, NOTE_B4, NOTE_E5, 
+    NOTE_E5, NOTE_E5, NOTE_GS5, NOTE_GS5, NOTE_A5, NOTE_B5, 
+    NOTE_A5, NOTE_A5, NOTE_A5, NOTE_E5, NOTE_D5, NOTE_FS5, 
+    NOTE_FS5, NOTE_FS5, NOTE_E5, NOTE_E5, NOTE_FS5, NOTE_E5
+  };
+  
+  int durations1[] = {
+    8, 8, 8, 4, 4, 4, 
+    4, 5, 8, 8, 8, 8, 
+    8, 8, 8, 4, 4, 4, 
+    4, 5, 8, 8, 8, 8
+  };
+  
+  int melody2[] = {
+    REST, NOTE_D5, NOTE_B4, NOTE_D5, //1
+    NOTE_CS5, NOTE_D5, NOTE_CS5, NOTE_A4, 
+    REST, NOTE_A4, NOTE_FS5, NOTE_E5, NOTE_D5,
+    NOTE_CS5, NOTE_D5, NOTE_CS5, NOTE_A4, 
+    REST, NOTE_D5, NOTE_B4, NOTE_D5,
+    NOTE_CS5, NOTE_D5, NOTE_CS5, NOTE_A4, 
+  
+    REST, NOTE_B4, NOTE_B4, NOTE_G4, NOTE_B4, //7
+    NOTE_A4, NOTE_B4, NOTE_A4, NOTE_D4,
+    REST, NOTE_D5, NOTE_B4, NOTE_D5,
+    NOTE_CS5, NOTE_D5, NOTE_CS5, NOTE_A4, 
+    REST, NOTE_A4, NOTE_FS5, NOTE_E5, NOTE_D5,
+    NOTE_CS5, NOTE_D5, NOTE_CS5, NOTE_A4
+  };
+  
+  int durations2[] = {
+    2, 8, 4, 8,
+    4, 8, 4, 2,
+    8, 8, 8, 4, 8,
+    4, 8, 4, 2,
+    4, 8, 4, 8,
+    4, 8, 4, 2,
+    4, 8, 4, 8,
+    4, 8, 4, 2,
+    8, 8, 4, 8,
+    8, 8, 8, 4, 8,
+    4, 8, 4, 8, 8,
+    8, 8, 8, 4, 8
+  };
+
+  int melody3[] = {
+  NOTE_E5, NOTE_D5, NOTE_FS4, NOTE_GS4, 
+  NOTE_CS5, NOTE_B4, NOTE_D4, NOTE_E4, 
+  NOTE_B4, NOTE_A4, NOTE_CS4, NOTE_E4,
+  NOTE_A4 
+  };
+
+  int durations3[] = {
+    8, 8, 4, 4,
+    8, 8, 4, 4,
+    8, 8, 4, 4,
+    2
+  };
+
+  int melody4[] = {
+  NOTE_E2, NOTE_E2, NOTE_E3, NOTE_E2, NOTE_E2, NOTE_D3, NOTE_E2, NOTE_E2,
+  NOTE_C3, NOTE_E2, NOTE_E2, NOTE_AS2, NOTE_E2, NOTE_E2, NOTE_B2, NOTE_C3,
+  NOTE_E2, NOTE_E2, NOTE_E3, NOTE_E2, NOTE_E2, NOTE_D3, NOTE_E2, NOTE_E2,
+  NOTE_C3, NOTE_E2, NOTE_E2, NOTE_AS2
+  };
+
+  int durations4[] = {
+    8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 1
+  };
+
+
+  switch (dificulty) {
+    case 1:
+      songLength = sizeof(melody1)/sizeof(melody1[0]);
+      duration = 1000/ durations1[currentNote];
+      tone(buzzerPin, melody1[currentNote], duration);
+      pause = duration * 1.3;
+      if(millis() - lastPause > pause){
+      noTone(buzzerPin);
+      currentNote++;
+      lastPause = millis();
+      break;
+      }
+
+      if(currentNote > songLength)
+        currentNote = 0;
+    
+      break;
+      
+    case 2:
+      songLength = sizeof(melody2)/sizeof(melody2[0]);
+      duration = 1000/ durations2[currentNote];
+      tone(buzzerPin, melody2[currentNote], duration);
+      pause = duration * 1.3;
+      if(millis() - lastPause > pause){
+      noTone(buzzerPin);
+      currentNote++;
+      lastPause = millis();
+      }
+  
+      if(currentNote > songLength)
+        currentNote = 0;
+      
+      break;
+
+    case 3:
+      songLength = sizeof(melody3)/sizeof(melody3[0]);
+      duration = 1000/ durations3[currentNote];
+      tone(buzzerPin, melody3[currentNote], duration);
+      pause = duration * 1.3;
+      if(millis() - lastPause > pause){
+      noTone(buzzerPin);
+      currentNote++;
+      lastPause = millis();
+      }
+  
+      if(currentNote > songLength)
+        currentNote = 0;
+      
+      break;
+
+     case 4:
+      songLength = sizeof(melody4)/sizeof(melody4[0]);
+      duration = 1000/ durations4[currentNote];
+      tone(buzzerPin, melody4[currentNote], duration);
+      pause = duration * 1.3;
+      if(millis() - lastPause > pause){
+      noTone(buzzerPin);
+      currentNote++;
+      lastPause = millis();
+      }
+  
+      if(currentNote > songLength)
+        currentNote = 0;
+      
+      break;
+      
   }
+
 }
 
-void music2(){
-  if(stopMusic)
-    return;
-  
-  int tempo = 80;
-  int melody[] = {
 
-  // The Godfather theme
-  // Score available at https://musescore.com/user/35463/scores/55160
-
-  REST, 4, REST, 8, REST, 8, REST, 8, NOTE_E4, 8, NOTE_A4, 8, NOTE_C5, 8, //1
-  NOTE_B4, 8, NOTE_A4, 8, NOTE_C5, 8, NOTE_A4, 8, NOTE_B4, 8, NOTE_A4, 8, NOTE_F4, 8, NOTE_G4, 8,
-  NOTE_E4, 2, NOTE_E4, 8, NOTE_A4, 8, NOTE_C5, 8,
-  NOTE_B4, 8, NOTE_A4, 8, NOTE_C5, 8, NOTE_A4, 8, NOTE_C5, 8, NOTE_A4, 8, NOTE_E4, 8, NOTE_DS4, 8,
-  
-  NOTE_D4, 2, NOTE_D4, 8, NOTE_F4, 8, NOTE_GS4, 8, //5
-  NOTE_B4, 2, NOTE_D4, 8, NOTE_F4, 8, NOTE_GS4, 8,
-  NOTE_A4, 2, NOTE_C4, 8, NOTE_C4, 8, NOTE_G4, 8, 
-  NOTE_F4, 8, NOTE_E4, 8, NOTE_G4, 8, NOTE_F4, 8, NOTE_F4, 8, NOTE_E4, 8, NOTE_E4, 8, NOTE_GS4, 8,
-};
-
-// sizeof gives the number of bytes, each int value is composed of two bytes (16 bits)
-// there are two values per note (pitch and duration), so for each note there are four bytes
-int notes = sizeof(melody) / sizeof(melody[0]) / 2;
-
-// this calculates the duration of a whole note in ms
-int wholenote = (60000 * 4) / tempo;
-
-int divider = 0, noteDuration = 0;
-
-  // iterate over the notes of the melody.
-  // Remember, the array is twice the number of notes (notes + durations)
-  for (int thisNote = 0; thisNote < notes * 2; thisNote = thisNote + 2) {
-
-    // calculates the duration of each note
-    divider = melody[thisNote + 1];
-    if (divider > 0) {
-      // regular note, just proceed
-      noteDuration = (wholenote) / divider;
-    } else if (divider < 0) {
-      // dotted notes are represented with negative durations!!
-      noteDuration = (wholenote) / abs(divider);
-      noteDuration *= 1.5; // increases the duration in half for dotted notes
-    }
-
-    // we only play the note for 90% of the duration, leaving 10% as a pause
-    tone(buzzerPin, melody[thisNote], noteDuration * 0.9);
-
-    // Wait for the specief duration before playing the next note.
-    delay(noteDuration);
-
-    // stop the waveform generation before the next note.
-    noTone(buzzerPin);
-  }
-
-}
 
 void deleteHighScore(){
   writeIntIntoEEPROM(hs1, 0);
