@@ -7,7 +7,7 @@ Must be screens:
   - settings (set difficulty, player's name, screen brightness, etc)
   - highscore (top 3 so far)
 2. Picture of the setup 
-![joc1](https://user-images.githubusercontent.com/61291904/145267416-e486fb1f-7895-474a-9eba-fe4e883777c7.png)
+![matrix](https://user-images.githubusercontent.com/61291904/147041469-e8938dee-e35e-4bb3-b811-ba85073e1e86.png)
 3. Video showcasing functionality
 4. Used components:
     - Arduino UNO
