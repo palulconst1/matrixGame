@@ -18,3 +18,6 @@ Must be screens:
     - Shift register
     - a lot of cables 
     - some < 330 ohm rezistors
+    
+5. Game chosen: Mega Tiles
+Purpose: Acquire as many tiles as fast as posible, by clicking on them. The more You play, the faster everything goes. As you progress through difficulties the games get harder, by providing long click tiles. Have fun while listening to best song themes, like DOOM!
