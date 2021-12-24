@@ -37,3 +37,11 @@ https://www.youtube.com/watch?v=BxTgqT_m-Rk
   - PLay state displays the game on the Matrix and the status on the LCD (lives, score, and difficulty).
   - Game over only displays the score and the "Game Over" message
   - New high score only displays the score and the "New Highscore" message
+
+6. Code thinking process
+- LCD and Matrix are taken apart so that they can't interfere with each other. 
+- LCD screens are managed with lcdState, making the process as clear as possible. Each time the state changes, the screen is cleared and the new one is displayed.
+- The game in projected in 2 parts, player input and tiles management. Tiles are spawned at rendom delays, so that the game doesn't become cyclic. Tiles are managed by states: not spawned, active, and ready to spawn.
+- For a difficulty higher than 2 some tiles are selected randomly to require a long press in order to be colected.
+- As the player colects more tiles and time passes the speed gets faster.
+- The playing song is managed remotly so that it doesn't interfere with the game, using one function for playing the note that is passed as the duration interval finishes
