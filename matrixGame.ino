@@ -3,6 +3,7 @@
 #include<EEPROM.h>
 #include "pitches.h"
 
+// struct for getting easier the positions on Matrix and LCD 
 struct Poz
 {
   byte col;
@@ -10,6 +11,7 @@ struct Poz
 };
 typedef struct Poz poz;
 
+// All the states are defined for a more easy to read code
 #define PLAY 0
 #define OPTIONS 1
 #define HIGHSCORE_MENU 2
@@ -70,6 +72,7 @@ const int d5 = 4;
 const int d6 = 3;
 const int d7 = 2;
 
+// hold the specific LCD meniu options for a faster and more secure walk through
 poz cursorOptionsMenu[4] = { {0, 0}, {7, 0}, {0, 1}, {10, 1 } };
 poz cursorOptionsSettings[6] = { {0, 0}, {6, 0}, {11, 0}, {0, 1}, {6, 1}, {13, 1 } };
 byte cursorActualPoz = 0;
@@ -166,7 +169,7 @@ unsigned int contrast = 100;
 bool contrastChanged = LOW;
 
 
-// memorii
+// memory space for all the important data
 #define currentUsername 0
 #define matrixBr 0
 #define lcdBr 3
@@ -234,7 +237,7 @@ void setup()
   matrix[xPos][yPos] = 1;
 
 
-  //read mem
+  //read all saved data
   matrixBrightness = readIntFromEEPROM(matrixBr);
   if(matrixBrightness > 15)
     matrixBrightness = matrixBrightness / 10;
@@ -288,6 +291,8 @@ void setup()
 void loop() { 
   if(!stopMusic)
     music();
+
+  //swich for managing the LCD state, making any change instant
   switch (lcdState)
   {
   case MENU:
@@ -306,10 +311,6 @@ void loop() {
     displayHighScore();
     break;
 
-  case SELECT_SONG:
-    selectSong();
-    break;
-
   case NEW_HIGHSCORE:
     displayNewHighscore();
     break;
@@ -322,7 +323,7 @@ void loop() {
     break;
   }
 }
-
+// gets the moves from joystick in order to cycle through screen
 byte updatePositionsLcd() {
   int xValue = analogRead(xPin);
   int yValue = analogRead(yPin);
@@ -355,6 +356,7 @@ byte updatePositionsLcd() {
   return 0;
 }
 
+// gets the moves from joystick for player
 byte playerMove() {
   int xValue = analogRead(xPin);
   int yValue = analogRead(yPin);
@@ -410,6 +412,7 @@ byte buttonPressed(){
   return 0;
 }
 
+// setting up name was covered as a different function so that it can't intefer with the background process
 void setupName() {
   while(settingName) {
   lcd.setCursor(7, 1);
@@ -465,7 +468,7 @@ void setupName() {
  }
  lcd.clear();
 }
-
+// menu screen with all the select options and coursor
 void displayMenu()
 {
 
@@ -506,7 +509,7 @@ void displayMenu()
     lcdState = cursorActualPoz;
     cursorActualPoz = 0;
 
-    
+    // initialize all the playing data
     lastDelayCheck[0] = millis();
     lastDelayCheck[1] = millis();
     lastDelayCheck[2] = millis();
@@ -531,6 +534,7 @@ void displayMenu()
 void play() {
 
   playMenu();
+  // score gets incresed faster and faster, as time passes and you colect more tiles
   if(millis() - lastScoreAdd > scoreDelay) {
   score = score + 1 * (2001 - tileSpeed)/500;
   lastScoreAdd = millis();
@@ -541,7 +545,7 @@ void play() {
   if(tilesColected > 0 && tilesColected % 10 == 0){
     score = score + dificulty * 15;
   }
-  
+  // check if game ended
   if(lifes <= 0) {
     stopMusic = 1;
     lc.clearDisplay(0);
@@ -552,6 +556,7 @@ void play() {
       lcdState = GAME_OVER;
     return;
   }
+  // implement player moves
   byte moved = playerMove();
   switch (moved)
   {
@@ -580,7 +585,7 @@ void play() {
   DisplayPlayer();
 
   
-
+  // check if a tile was collected or if it needs a long press
   if(buttonPressed()) {
     lastDoubleBounce = millis();
     byte col = playerPoz.col;
@@ -621,7 +626,7 @@ void play() {
   }
   
 }
-
+// options screen with all the customizable hardware parameters
 void displayOptions()
 { 
   lcd.setCursor(1, 0);
@@ -930,11 +935,6 @@ void displayHighScore() {
   
 }
 
- void selectSong() {
-  lcd.setCursor(1, 0);
-  lcd.print("Preparing");
-}
-
  void displayGameOver() {
   lcd.setCursor(0, 0);
   lcd.print("GAME OVER");
@@ -951,7 +951,7 @@ void displayHighScore() {
   }
 }
 
-
+// functions with only one purpose, displaying and clearing the tile position
 void showTile(poz tile) {
   lc.setLed(0, tile.col - 1, tile.lin, true);
   lc.setLed(0, tile.col, tile.lin, true);
@@ -1022,7 +1022,7 @@ void turnOffMatrix() {
     }
   }
 }
-
+// functions with only one purpose, displaying and clearing the player position
 void DisplayPlayer() {
   lc.setLed(0, playerPoz.col, playerPoz.lin, true);
   lc.setLed(0, playerPoz.col, playerPoz.lin + 1, true);
@@ -1085,7 +1085,7 @@ void displayTiles(){
     displayTile(2);
   
 }
-
+// manages the whole proces of showing and creating tiles, checking if it was collected, got to the end
 void displayTile(int tileNr) {
   showTile(tilesPoz[tileNr]);
  
@@ -1135,6 +1135,7 @@ long lastPause = 0;
 int songLength = 0;
 int duration = 0;
 
+// plays the song asyncronous so that the program doesn't get delayed
 void music(){
   if(stopMusic)
     return;
